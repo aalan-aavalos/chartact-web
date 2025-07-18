@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useLocation, Link } from 'react-router-dom';
 import {
   Home,
-  Article,
+  // Article,
   Memory,
   Menu,
   Close,
@@ -13,7 +13,7 @@ import { Box, IconButton, Typography, Tooltip } from '@mui/material';
 const navItems = [
   { to: '/', label: 'Inicio', icon: <Home fontSize="small" /> },
   { to: '/models', label: 'Modelos', icon: <Memory fontSize="small" /> },
-  { to: '/documents', label: 'Documentos', icon: <Article fontSize="small" /> },
+  // { to: '/documents', label: 'Documentos', icon: <Article fontSize="small" /> },
 ];
 
 const Sidebar = () => {

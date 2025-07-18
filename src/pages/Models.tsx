@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   Box,
   Typography,
@@ -21,9 +21,8 @@ import {
 } from '@mui/material';
 import { Info, Delete } from '@mui/icons-material';
 
-// Tipos basados en el JSON
-type Model = {
-  training_results: any;
+// Tipos basados en el JSON de la API
+export type Model = {
   model_id: string;
   model_name: string;
   created_at: string;
@@ -33,46 +32,75 @@ type Model = {
   num_samples: number;
   label_distribution: Record<string, number>;
   training_type: string;
+  training_results: {
+    accuracy: number;
+    classification_report: Record<string, any>;
+    confusion_matrix: number[][];
+  };
+  age_ranges?: string[];
+  genders?: string[];
+  columns_used?: string[];
+  labels?: string[];
 };
 
 type ModelsData = {
   models: Model[];
 };
 
-// Datos de ejemplo (luego los reemplazarás con una llamada API)
-const sampleData: ModelsData = {
-  models: [
-    // Tus datos del JSON aquí...
-  ]
-};
-
 export const Models = () => {
   const theme = useTheme();
-  const [models, setModels] = useState<Model[]>(sampleData.models);
+  const [models, setModels] = useState<Model[]>([]);
+  const [loading, setLoading] = useState<boolean>(false);
+  const [error, setError] = useState<string | null>(null);
   const [selectedModel, setSelectedModel] = useState<Model | null>(null);
   const [openDialog, setOpenDialog] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState(false);
 
-  // Formatear fecha
-  const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
-    return date.toLocaleDateString('es-ES', {
-      day: '2-digit',
-      month: '2-digit',
-      year: 'numeric'
-    });
-  };
+  // Fetch models
+  useEffect(() => {
+    const fetchModels = async () => {
+      setLoading(true);
+      try {
+        const response = await fetch('http://localhost:8000/api/models/list');
+        if (!response.ok) throw new Error(`Error ${response.status}: ${response.statusText}`);
+        const data: ModelsData = await response.json();
+        setModels(data.models);
+      } catch (err: any) {
+        console.error(err);
+        setError(err.message || 'Error al obtener los modelos');
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchModels();
+  }, []);
 
-  // Ver detalles del modelo
+  // Format date
+  const formatDate = (dateString: string) => new Date(dateString).toLocaleDateString('es-ES', {
+    day: '2-digit', month: '2-digit', year: 'numeric'
+  });
+
+  // View details
   const handleViewDetails = (model: Model) => {
     setSelectedModel(model);
     setOpenDialog(true);
   };
 
-  // Eliminar modelo
-  const handleDelete = (modelId: string) => {
-    setModels(models.filter(model => model.model_id !== modelId));
-    setDeleteConfirm(false);
+  // Delete model
+  const handleDelete = async (modelId: string) => {
+    try {
+      const response = await fetch(
+        `http://localhost:8000/api/models/delete/${modelId}`,
+        { method: 'DELETE' }
+      );
+      if (!response.ok) throw new Error(`Error ${response.status}: ${response.statusText}`);
+      setModels(prev => prev.filter(m => m.model_id !== modelId));
+    } catch (err: any) {
+      console.error(err);
+      setError(err.message || 'Error al eliminar el modelo');
+    } finally {
+      setDeleteConfirm(false);
+    }
   };
 
   return (
@@ -81,77 +109,59 @@ export const Models = () => {
         Modelos Guardados
       </Typography>
 
-      <TableContainer component={Paper} sx={{ bgcolor: '#1e1e1e' }}>
-        <Table>
-          <TableHead>
-            <TableRow sx={{ bgcolor: '#333' }}>
-              <TableCell sx={{ color: 'white' }}>Nombre</TableCell>
-              <TableCell sx={{ color: 'white' }}>Fecha</TableCell>
-              <TableCell sx={{ color: 'white' }}>Descripción</TableCell>
-              <TableCell sx={{ color: 'white' }}>Dimensiones</TableCell>
-              <TableCell sx={{ color: 'white' }}>Muestras</TableCell>
-              <TableCell sx={{ color: 'white' }}>Operaciones</TableCell>
-            </TableRow>
-          </TableHead>
-          <TableBody>
-            {models.map((model) => (
-              <TableRow
-                key={model.model_id}
-                sx={{ '&:nth-of-type(even)': { bgcolor: '#252525' } }}
-              >
-                <TableCell sx={{ color: 'white' }}>{model.model_name}</TableCell>
-                <TableCell sx={{ color: 'white' }}>{formatDate(model.created_at)}</TableCell>
-                <TableCell sx={{ color: 'white' }}>{model.description}</TableCell>
-                <TableCell>
-                  <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
-                    {model.dimensions.map(dim => (
-                      <Chip
-                        key={dim}
-                        label={dim}
-                        size="small"
-                        sx={{ bgcolor: theme.palette.warning.dark, color: 'white' }}
-                      />
-                    ))}
-                  </Box>
-                </TableCell>
-                <TableCell sx={{ color: 'white' }}>{model.num_samples}</TableCell>
-                <TableCell>
-                  <Box sx={{ display: 'flex', gap: 1 }}>
-                    <Tooltip title="Ver detalles">
-                      <IconButton
-                        onClick={() => handleViewDetails(model)}
-                        sx={{ color: theme.palette.info.main }}
-                      >
-                        <Info />
-                      </IconButton>
-                    </Tooltip>
-                    <Tooltip title="Eliminar">
-                      <IconButton
-                        onClick={() => {
-                          setSelectedModel(model);
-                          setDeleteConfirm(true);
-                        }}
-                        sx={{ color: theme.palette.error.main }}
-                      >
-                        <Delete />
-                      </IconButton>
-                    </Tooltip>
-                  </Box>
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </TableContainer>
+      {loading && <Typography>Cargando modelos...</Typography>}
+      {error && <Typography color="error">{error}</Typography>}
 
-      {/* Dialogo de detalles */}
-      <Dialog
-        open={openDialog}
-        onClose={() => setOpenDialog(false)}
-        maxWidth="md"
-        fullWidth
-        PaperProps={{ sx: { bgcolor: '#1e1e1e', color: 'white' } }}
-      >
+      {!loading && !error && (
+        <TableContainer component={Paper} sx={{ bgcolor: '#1e1e1e' }}>
+          <Table>
+            <TableHead>
+              <TableRow sx={{ bgcolor: '#333' }}>
+                <TableCell sx={{ color: 'white' }}>Nombre</TableCell>
+                <TableCell sx={{ color: 'white' }}>Fecha</TableCell>
+                <TableCell sx={{ color: 'white' }}>Descripción</TableCell>
+                <TableCell sx={{ color: 'white' }}>Dimensiones</TableCell>
+                <TableCell sx={{ color: 'white' }}>Muestras</TableCell>
+                <TableCell sx={{ color: 'white' }}>Operaciones</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {models.map(model => (
+                <TableRow key={model.model_id} sx={{ '&:nth-of-type(even)': { bgcolor: '#252525' } }}>
+                  <TableCell sx={{ color: 'white' }}>{model.model_name}</TableCell>
+                  <TableCell sx={{ color: 'white' }}>{formatDate(model.created_at)}</TableCell>
+                  <TableCell sx={{ color: 'white' }}>{model.description}</TableCell>
+                  <TableCell>
+                    <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+                      {model.dimensions.map(dim => (
+                        <Chip key={dim} label={dim} size="small" sx={{ bgcolor: theme.palette.warning.dark, color: 'white' }} />
+                      ))}
+                    </Box>
+                  </TableCell>
+                  <TableCell sx={{ color: 'white' }}>{model.num_samples}</TableCell>
+                  <TableCell>
+                    <Box sx={{ display: 'flex', gap: 1 }}>
+                      <Tooltip title="Ver detalles">
+                        <IconButton onClick={() => handleViewDetails(model)} sx={{ color: theme.palette.info.main }}>
+                          <Info />
+                        </IconButton>
+                      </Tooltip>
+                      <Tooltip title="Eliminar">
+                        <IconButton onClick={() => { setSelectedModel(model); setDeleteConfirm(true); }} sx={{ color: theme.palette.error.main }}>
+                          <Delete />
+                        </IconButton>
+                      </Tooltip>
+                    </Box>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </TableContainer>
+      )}
+
+      {/* Detalles Dialog */}
+      <Dialog open={openDialog} onClose={() => setOpenDialog(false)} maxWidth="md" fullWidth PaperProps={{ sx: { bgcolor: '#1e1e1e', color: 'white' } }}>
         <DialogTitle sx={{ color: theme.palette.warning.main }}>
           Detalles del Modelo: {selectedModel?.model_name}
         </DialogTitle>
@@ -159,54 +169,33 @@ export const Models = () => {
           {selectedModel && (
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
               <Box>
-                <Typography variant="subtitle1" sx={{ color: theme.palette.warning.light }}>
-                  Descripción:
-                </Typography>
+                <Typography variant="subtitle1" sx={{ color: theme.palette.warning.light }}>Descripción:</Typography>
                 <Typography>{selectedModel.description}</Typography>
               </Box>
 
               <Box sx={{ display: 'flex', gap: 4 }}>
                 <Box>
-                  <Typography variant="subtitle1" sx={{ color: theme.palette.warning.light }}>
-                    Dimensiones:
-                  </Typography>
+                  <Typography variant="subtitle1" sx={{ color: theme.palette.warning.light }}>Dimensiones:</Typography>
                   <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', mt: 1 }}>
-                    {selectedModel.dimensions.map(dim => (
-                      <Chip
-                        key={dim}
-                        label={dim}
-                        sx={{ bgcolor: theme.palette.warning.dark, color: 'white' }}
-                      />
-                    ))}
+                    {selectedModel.dimensions.map(dim => <Chip key={dim} label={dim} sx={{ bgcolor: theme.palette.warning.dark, color: 'white' }} />)}
                   </Box>
                 </Box>
 
                 <Box>
-                  <Typography variant="subtitle1" sx={{ color: theme.palette.warning.light }}>
-                    Categorías:
-                  </Typography>
+                  <Typography variant="subtitle1" sx={{ color: theme.palette.warning.light }}>Categorías:</Typography>
                   <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', mt: 1 }}>
                     {selectedModel.categories.map(cat => (
-                      <Chip
-                        key={cat}
-                        label={cat}
-                        sx={{ 
-                          bgcolor: 
-                            cat === 'Analista' ? '#3B8BEA' :
-                            cat === 'Diplomático' ? '#24B47E' :
-                            cat === 'Centinela' ? '#E6A600' : '#DD3E3E',
-                          color: 'white'
-                        }}
-                      />
+                      <Chip key={cat} label={cat} sx={{
+                        bgcolor: cat === 'Analista' ? '#3B8BEA' : cat === 'Diplomático' ? '#24B47E' : cat === 'Centinela' ? '#E6A600' : '#DD3E3E',
+                        color: 'white'
+                      }} />
                     ))}
                   </Box>
                 </Box>
               </Box>
 
               <Box>
-                <Typography variant="subtitle1" sx={{ color: theme.palette.warning.light }}>
-                  Distribución de categorías:
-                </Typography>
+                <Typography variant="subtitle1" sx={{ color: theme.palette.warning.light }}>Distribución de categorías:</Typography>
                 <TableContainer component={Paper} sx={{ bgcolor: '#252525', mt: 1 }}>
                   <Table size="small">
                     <TableHead>
@@ -218,18 +207,7 @@ export const Models = () => {
                     <TableBody>
                       {Object.entries(selectedModel.label_distribution).map(([label, count]) => (
                         <TableRow key={label}>
-                          <TableCell sx={{ color: 'white' }}>
-                            <Chip
-                              label={label}
-                              sx={{ 
-                                bgcolor: 
-                                  label === 'Analista' ? '#3B8BEA' :
-                                  label === 'Diplomático' ? '#24B47E' :
-                                  label === 'Centinela' ? '#E6A600' : '#DD3E3E',
-                                color: 'white'
-                              }}
-                            />
-                          </TableCell>
+                          <TableCell sx={{ color: 'white' }}><Chip label={label} sx={{ bgcolor: label === 'Analista' ? '#3B8BEA' : label === 'Diplomático' ? '#24B47E' : label === 'Centinela' ? '#E6A600' : '#DD3E3E', color: 'white' }} /></TableCell>
                           <TableCell sx={{ color: 'white' }} align="right">{count}</TableCell>
                         </TableRow>
                       ))}
@@ -239,55 +217,29 @@ export const Models = () => {
               </Box>
 
               <Box>
-                <Typography variant="subtitle1" sx={{ color: theme.palette.warning.light }}>
-                  Métricas de entrenamiento:
-                </Typography>
+                <Typography variant="subtitle1" sx={{ color: theme.palette.warning.light }}>Métricas:</Typography>
                 <Typography>Tipo: {selectedModel.training_type === 'classical' ? 'Clásico' : 'Clustering'}</Typography>
+                <Typography>Muestras: {selectedModel.num_samples}</Typography>
                 <Typography>Precisión: {(selectedModel.training_results.accuracy * 100).toFixed(2)}%</Typography>
               </Box>
             </Box>
           )}
         </DialogContent>
         <DialogActions>
-          <Button 
-            onClick={() => setOpenDialog(false)}
-            sx={{ color: theme.palette.warning.main }}
-          >
-            Cerrar
-          </Button>
+          <Button onClick={() => setOpenDialog(false)} sx={{ color: theme.palette.warning.main }}>Cerrar</Button>
         </DialogActions>
       </Dialog>
 
-      {/* Confirmación de eliminación */}
-      <Dialog
-        open={deleteConfirm}
-        onClose={() => setDeleteConfirm(false)}
-        PaperProps={{ sx: { bgcolor: '#1e1e1e', color: 'white' } }}
-      >
-        <DialogTitle sx={{ color: theme.palette.error.main }}>
-          Confirmar Eliminación
-        </DialogTitle>
+      {/* Confirm Delete Dialog */}
+      <Dialog open={deleteConfirm} onClose={() => setDeleteConfirm(false)} PaperProps={{ sx: { bgcolor: '#1e1e1e', color: 'white' } }}>
+        <DialogTitle sx={{ color: theme.palette.error.main }}>Confirmar Eliminación</DialogTitle>
         <DialogContent>
-          <Typography>
-            ¿Estás seguro de que deseas eliminar el modelo "{selectedModel?.model_name}"?
-          </Typography>
-          <Typography variant="body2" sx={{ mt: 1, color: 'grey.400' }}>
-            Esta acción no se puede deshacer.
-          </Typography>
+          <Typography>¿Estás seguro de que deseas eliminar el modelo "{selectedModel?.model_name}"?</Typography>
+          <Typography variant="body2" sx={{ mt: 1, color: 'grey.400' }}>Esta acción no se puede deshacer.</Typography>
         </DialogContent>
         <DialogActions>
-          <Button 
-            onClick={() => setDeleteConfirm(false)}
-            sx={{ color: 'grey.300' }}
-          >
-            Cancelar
-          </Button>
-          <Button 
-            onClick={() => selectedModel && handleDelete(selectedModel.model_id)}
-            sx={{ color: theme.palette.error.main }}
-          >
-            Eliminar
-          </Button>
+          <Button onClick={() => setDeleteConfirm(false)} sx={{ color: 'grey.300' }}>Cancelar</Button>
+          <Button onClick={() => selectedModel && handleDelete(selectedModel.model_id)} sx={{ color: theme.palette.error.main }}>Eliminar</Button>
         </DialogActions>
       </Dialog>
     </Box>
