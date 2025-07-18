@@ -26,7 +26,6 @@ const Sidebar = () => {
         width: collapsed ? '64px' : '240px',
         bgcolor: 'grey.900',
         color: 'white',
-        height: '100vh',
         transition: 'width 0.3s',
         display: 'flex',
         flexDirection: 'column',
